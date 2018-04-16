@@ -7,7 +7,7 @@
     <ProjectGuid>{98F44FAD-87FB-4666-888F-32FDC5EDC6B5}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>TwoA</RootNamespace>
+    <RootNamespace>TwoANS</RootNamespace>
     <AssemblyName>TwoA</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -38,11 +38,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AdaptationData.cs" />
+    <Compile Include="BaseAdapter.cs" />
     <Compile Include="DifficultyAdapter.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="GameplaysData.cs" />
+    <Compile Include="DifficultyAdapterElo.cs" />
+    <Compile Include="Gameplay.cs" />
     <Compile Include="KS\KSRank.cs" />
     <Compile Include="KS\KState.cs" />
     <Compile Include="KS\KStructure.cs" />
@@ -50,6 +51,8 @@
     <Compile Include="KS\Rank.cs" />
     <Compile Include="KS\RankOrder.cs" />
     <Compile Include="KS\XML\XMLFactory.cs" />
+    <Compile Include="PlayerNode.cs" />
+    <Compile Include="ScenarioNode.cs" />
     <Compile Include="TwoA.cs" />
     <Compile Include="KS\KSGenerator.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

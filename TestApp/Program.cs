@@ -1,7 +1,7 @@
 ﻿#region Header
 
 /*
-Copyright 2015 Enkhbold Nyamsuren (http://www.bcogs.net , http://www.bcogs.info/)
+Copyright 2017 Enkhbold Nyamsuren (http://www.bcogs.net , http://www.bcogs.info/)
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,6 +29,25 @@ Filename: Program.cs
 //      - [SC] "gameplaylogs.xml" and "TwoAAppSettings.xml" are converted to embedded resources
 //      - [SC] updated description of example output for 'UpdateRatings' annd 'TargetScenarioID' methods
 //      - [SC] added 'testKnowledgeSpaceGeneration' method with examples of using knowledge space generator
+// [2017.01.02]
+//      - [SC] added 'TileZero' project
+//      - [SC] added 'evaluateTileZeroAIDifficulty' method
+//      - [SC] added 'doTileZeroSimulation' method
+//      - [SC] added references to external libraries: 
+//              'Microsoft.Msagl.dll'
+//              'Microsoft.Msagl.Drawing.dll'
+//              'Microsoft.Msagl.GraphViewerGdi.dll'
+// [2017.01.03]
+//      - [SC] added 'testScoreCalculations' method
+// [2017.02.14]
+//      - [SC] added 'testAdaptationAndAssessmentElo' method
+//
+//
+
+// [TODO] need to change the program
+// [TODO] add scenario and player methods in TwoA should return nodes or null instead of boolean 
+// [TODO] add log show flag params in scenario and player getters
+
 
 #endregion Header
 
@@ -43,17 +62,705 @@ namespace TestApp
     using System.Xml.Linq;
     using System.Diagnostics;
 
-    using TwoA;
+    // [SC] Load TwoA and Rage architecture
+    using TwoANS;
     using AssetPackage;
 
-    class Program
-    {
-        static void Main (string[] args) {
-            testAdaptationAndAssessment();
-            printMsg("############################################################################");
-            testKnowledgeSpaceGeneration();
+    class Program {
+        static void Main(string[] args) {
+            // [SC] demo of usage of the adaptation module that requires player accuracy and response time measurements
+            // [SC] player accuracy should be either 0 (fail) or 1 (success), and response time should be measured in milliseconds
+            //demoAdaptationAndAssessment();
+
+            // [SC] demo of usage of the adaptation module that requires player accuracy only
+            // [SC] player accuracy can be any value between 0 and 1
+            //printMsg("############################################################################");
+            demoAdaptationAndAssessmentElo();
+
+            // [SC] test universal score estimation based on player's accuracy and response time
+            //printMsg("############################################################################");
+            //testScoreCalculations();
+
+            // [SC] test generation of a graph of dependencies among game scenarios based on their difficulties
+            //printMsg("############################################################################");
+            //testKnowledgeSpaceGeneration();
 
             Console.ReadKey();
+        }
+
+        static void demoAdaptationAndAssessment() {
+            string adaptID = DifficultyAdapter.Type;
+            string gameID = "TileZero";
+            string playerID = "Noob";           // [SC] using this player as an example
+            string scenarioID = "Hard AI";      // [SC] using this scenario as an example
+            bool updateScenarioRatings = true;  // [SC] alwyas update scenario ratings
+            DateTime lastPlayed = DateTime.ParseExact("2012-12-31T11:59:59", TwoA.DATE_FORMAT, null);
+
+            TwoA twoA = new TwoA(new MyBridge());
+
+            #region Examples of adding scenario data into TwoA
+
+            // [SC] Scenario data is strored in 'TwoA.scenarios'. Its datatype is List<ScenarioNode>. It has a public access modifier.
+            // [SC] Each ScenarioNode instance contains data for a single scenario.
+            // [SC] TwoA also provides predefined methods for adding new scenarios.
+            // [SC] Methods in TwoA (cases 1 - 4) ensure that all values are valid and ID combination is unique to the scenario.
+            // [SC] Excercise care if you add new scenario by directly accessing the 'TwoA.scenarios' variable. Make sure a combination of adapID, gameID, scenarioID is unique.
+
+            // [SC] Adding scenario data, Case 1
+            twoA.AddScenario(
+                new ScenarioNode (adaptID, gameID, "Very Easy AI") {
+                    Rating = 1.2,
+                    PlayCount = 100,
+                    KFactor = 0.0075,
+                    Uncertainty = 0.01,
+                    LastPlayed = lastPlayed,
+                    TimeLimit = 900000
+                }
+            );
+
+            // [SC] Adding scenario data, Case 2
+            twoA.AddScenario(new ScenarioNode(adaptID, gameID, "Easy AI", 1.4, 100, 0.0075, 0.01, lastPlayed, 900000));
+
+            // [SC] Adding scenario data, Case 3
+            twoA.AddScenario(adaptID, gameID, "Medium Color AI", 1.6, 100, 0.0075, 0.01, lastPlayed, 900000);
+
+            // [SC] Adding scenario data, Case 4: scenario parameters will be assigned default values
+            // [SC] Changing the default values
+            twoA.AddScenario(adaptID, gameID, "Medium Shape AI");
+            twoA.ScenarioRating(adaptID, gameID, "Medium Shape AI", 1.6);
+            twoA.ScenarioPlayCount(adaptID, gameID, "Medium Shape AI", 100);
+            twoA.ScenarioKFactor(adaptID, gameID, "Medium Shape AI", 0.0075);
+            twoA.ScenarioUncertainty(adaptID, gameID, "Medium Shape AI", 0.01);
+            twoA.ScenarioLastPlayed(adaptID, gameID, "Medium Shape AI", lastPlayed);
+            twoA.ScenarioTimeLimit(adaptID, gameID, "Medium Shape AI", 900000);
+
+            // [SC] Adding scenario data, Case 5: directly accessing the List structure
+            twoA.scenarios.Add(
+                new ScenarioNode (adaptID, gameID, scenarioID) { // [SC] Hard AI  
+                    Rating = 6,
+                    PlayCount = 100,
+                    KFactor = 0.0075,
+                    Uncertainty = 0.01,
+                    LastPlayed = lastPlayed,
+                    TimeLimit = 900000
+                }
+            );
+
+            // [SC] Adding scenario data, Case 6
+            twoA.scenarios.Add(new ScenarioNode(adaptID, gameID, "Very Hard AI", 10, 100, 0.0075, 0.01, lastPlayed, 900000));
+
+            // [SC] Retrieveing a scenario node by scenario ID
+            ScenarioNode scenarioNode = twoA.Scenario(adaptID, gameID, scenarioID);
+
+            printMsg("\nExample scenario parameters: ");
+            printMsg(String.Format("    ScenarioID: {0}.", scenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", scenarioNode.Rating));
+            printMsg(String.Format("    Play count: {0}.", scenarioNode.PlayCount));
+            printMsg(String.Format("    K factor: {0}.", scenarioNode.KFactor));
+            printMsg(String.Format("    Uncertainty: {0}.", scenarioNode.Uncertainty));
+            printMsg(String.Format("    Last played: {0}.", scenarioNode.LastPlayed.ToString(TwoA.DATE_FORMAT)));
+            printMsg(String.Format("    Time limit: {0}.", scenarioNode.TimeLimit));
+
+            #endregion Examples of adding scenario data into TwoA
+
+            #region Examples of adding player data into TwoA
+
+            // [SC] Player data is strored in 'TwoA.players'. Its datatype is List<PlayerNode>. It has a public access modifier.
+            // [SC] Similar to scenarios, predefined methods 'AddPlayer' are provided by the TwoA class.
+
+            // [SC] adding a new player node
+            twoA.AddPlayer(
+                new PlayerNode (adaptID, gameID, playerID) {
+                    Rating = 5.5,
+                    PlayCount = 100,
+                    KFactor = 0.0075,
+                    Uncertainty = 0.01,
+                    LastPlayed = lastPlayed,
+                }
+            );
+
+            // [SC] Retrieveing a player node by player ID
+            PlayerNode playerNode = twoA.Player(adaptID, gameID, playerID);
+
+            printMsg("\nExample player parameters: ");
+            printMsg(String.Format("    Player ID: {0}.", playerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", playerNode.Rating));
+            printMsg(String.Format("    Play count: {0}.", playerNode.PlayCount));
+            printMsg(String.Format("    K factor: {0}.", playerNode.KFactor));
+            printMsg(String.Format("    Uncertainty: {0}.", playerNode.Uncertainty));
+            printMsg(String.Format("    Last played: {0}.", playerNode.LastPlayed.ToString(TwoA.DATE_FORMAT)));
+
+            #endregion Examples of adding player data into TwoA
+
+            #region Demo of methods for requesting a recommended scenario
+
+            // [SC] Demo of different methods for requesting a recommended scenario
+            // [SC] By default, the success rate P = 0.75, this means that TwoA will recommend a scenario where player's probability of completing the scenario is 75%. 
+            // [SC] For more details on the success rate, refer to the "Methods for controlling success rate parameter." section in the API manual.
+            // [SC] Asking for the recommendations for the player 'Noob'.
+            // [SC] Among 10 requests, the most frequent recommendation should be the scenario 'Hard AI'.
+            // [SC] 'Hard AI' scenario is recommended since it has a rating closest to the player's rating
+            printMsg(String.Format("\nAsk 10 times for a recommended scenarios for the player {0}; P = 0.75: ", playerID));
+            printMsg("    " + twoA.TargetScenarioID(adaptID, gameID, playerID));                // Case 1: directly return scenario ID
+            printMsg("    " + twoA.TargetScenarioID(playerNode));                               // Case 2: directly return scenario ID
+            printMsg("    " + twoA.TargetScenario(adaptID, gameID, playerID).ScenarioID);       // Case 3: returns ScenarioNode
+            printMsg("    " + twoA.TargetScenario(playerNode).ScenarioID);                      // Case 4: returns ScenarioNode
+            printMsg("    " + twoA.TargetScenario(playerNode, twoA.scenarios).ScenarioID);      // Case 5: provide a custom list of scenarios from which to choose; returns ScenarioNode
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+
+            // [SC] Changing the success rate to P = 0.1. Player has only 10% chance of succeeding.
+            // [SC] For more details on the success rate, refer to the "Methods for controlling success rate parameter." section in the API manual.
+            // [SC] TwoA should recommend Very Hard AI in some cases.
+            twoA.SetTargetDistribution(adaptID, 0.1, 0.05, 0.01, 0.35);
+            printMsg(String.Format("\nAsk 10 times for a recommended scenarios for the player {0}; P = 0.5: ", playerID));
+            for (int i = 0; i < 10; i++) {
+                printMsg("    " + twoA.TargetScenarioID(playerNode));
+            }
+
+            #endregion Demo of methods for requesting a recommended scenario
+
+            #region Demo for requesting a recommended difficulty rating
+
+            // [SC] set target success rate to P = 0.75
+            twoA.SetTargetDistribution(adaptID, 0.75, 0.1, 0.5, 1.0); // [SC] this is the same as twoA.SetDefaultTargetDistribution(adaptID)
+            printMsg(String.Format("\nRecommended difficulty rating {0} for player rating {1} and success rate {2}."
+                    , twoA.TargetDifficultyRating(playerNode), playerNode.Rating, twoA.GetTargetDistribution(adaptID)[0]));
+            // [SC] set target success rate to P = 0.1
+            twoA.SetTargetDistribution(adaptID, 0.1, 0.05, 0.01, 0.35);
+            printMsg(String.Format("Recommended difficulty rating {0} for player rating {1} and success rate {2}."
+                    , twoA.TargetDifficultyRating(playerNode), playerNode.Rating, twoA.GetTargetDistribution(adaptID)[0]));
+
+            #endregion Demo for requesting a recommended difficulty rating
+
+            #region Demo of methods for reassessing player and scenario ratings
+
+            printMsg("\nFirst simulated gameplay. Player performed well. Player rating increases and scenario rating decreases: ");
+            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 120000, 1, updateScenarioRatings, 0); // [SC] Case 1: passing player and scenario IDs
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg("\nSecond simulated gameplay. Player performed well again. Player rating increases and scenario rating decreases: ");
+            twoA.UpdateRatings(playerNode, scenarioNode, 230000, 1, updateScenarioRatings, 0); // [SC] Case 2: passing PlayerNode and ScenarioNode instances
+            printMsg(String.Format("    Player ID: {0}.", playerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", playerNode.Rating));
+            printMsg(String.Format("    Play count: {0}.", playerNode.PlayCount));
+            printMsg(String.Format("    K factor: {0}.", playerNode.KFactor));
+            printMsg(String.Format("    Uncertainty: {0}.", playerNode.Uncertainty));
+            printMsg(String.Format("    Last played: {0}.", playerNode.LastPlayed.ToString(TwoA.DATE_FORMAT)));
+            printMsg("");
+            printMsg(String.Format("    ScenarioID: {0}.", scenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", scenarioNode.Rating));
+            printMsg(String.Format("    Play count: {0}.", scenarioNode.PlayCount));
+            printMsg(String.Format("    K factor: {0}.", scenarioNode.KFactor));
+            printMsg(String.Format("    Uncertainty: {0}.", scenarioNode.Uncertainty));
+            printMsg(String.Format("    Last played: {0}.", scenarioNode.LastPlayed.ToString(TwoA.DATE_FORMAT)));
+            printMsg(String.Format("    Time limit: {0}.", scenarioNode.TimeLimit));
+
+            printMsg("\nThird simulated gameplay. Player performed poorly. Player rating decreass and scenario rating increases: ");
+            twoA.UpdateRatings(playerNode, scenarioNode, 12000, 0, updateScenarioRatings, 0);
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg("\nFourth simulated gameplay. Using custom K factor to scale rating changes. Player rating increases and scenario rating decreases: ");
+            PlayerNode clonePlayerNode = playerNode.ShallowClone();
+            ScenarioNode cloneScenarioNode = scenarioNode.ShallowClone();
+            twoA.UpdateRatings(playerNode, scenarioNode, 12000, 1, updateScenarioRatings, 0); // [SC] as a contrast, use no custom K factor
+            twoA.UpdateRatings(clonePlayerNode, cloneScenarioNode, 12000, 1, updateScenarioRatings, 1); // [SC] use K factor of 10 for both player and scenario
+            printMsg(String.Format("    Player ID: {0}.", playerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", playerNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", playerNode.KFactor));
+            printMsg("");
+            printMsg(String.Format("    Player ID (custom K factor): {0}.", clonePlayerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", clonePlayerNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", clonePlayerNode.KFactor));
+            printMsg("");
+            printMsg(String.Format("    ScenarioID: {0}.", scenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", scenarioNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", scenarioNode.KFactor));
+            printMsg("");
+            printMsg(String.Format("    ScenarioID (custom K factor): {0}.", cloneScenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", cloneScenarioNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", cloneScenarioNode.KFactor));
+
+            #endregion Demo of methods for reassessing player and scenario ratings
+
+            #region example output
+            ///////////////////////////////////////////////////////////////////////
+            // [SC] the Console/Debug output should resemble (not exactly the same since there is some randomness in the asset) the output below
+            //
+            //Example scenario parameters: 
+            //    ScenarioID: Hard AI
+            //    Rating: 6
+            //    PlayCount: 100
+            //    KFactor: 0.0075
+            //    Uncertainty: 0.01
+            //    LastPlayed: 2012-12-31T11:59:59
+            //    TimeLimit: 900000
+            //
+            //Example player parameters: 
+            //    PlayerID: Noob
+            //    Rating: 5.5
+            //    PlayCount: 100
+            //    KFactor: 0.0075
+            //    Uncertainty: 0.01
+            //    LastPlayed: 2012-12-31T11:59:59
+            //
+            //Ask 10 times for a recommended scenarios for the player Noob; P = 0.75:  
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Medium Shape AI
+            //    Hard AI
+            //    Hard AI
+            //
+            //Ask 10 times for a recommended scenarios for the player Noob; P = 0.5: 
+            //    Very Hard AI
+            //    Very Hard AI
+            //    Hard AI
+            //    Very Hard AI
+            //    Very Hard AI
+            //    Very Hard AI
+            //    Hard AI
+            //    Very Hard AI
+            //    Hard AI
+            //    Hard AI
+            //
+            // Recommended difficulty rating 4.40138771133189 for player rating 5.5 and success rate 0.75.
+            // Recommended difficulty rating 7.69722457733622 for player rating 5.5 and success rate 0.1.
+            //
+            //First simulated gameplay. Player performed well. Player rating increases and scenario rating decreases: 
+            //    PlayerID: Noob
+            //    Rating: 5.53437762105702
+            //    PlayCount: 101
+            //    KFactor: 0.03335625
+            //    Uncertainty: 0.985
+            //    LastPlayed: 2016-11-29T11:52:55
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.96562237894298
+            //    PlayCount: 101
+            //    KFactor: 0.03335625
+            //    Uncertainty: 0.985
+            //    LastPlayed: 2016-11-29T11:52:55
+            //    TimeLimit: 900000
+            //
+            //Second simulated gameplay. Player performed well again. Player rating increases and scenario rating decreases: 
+            //    PlayerID: Noob
+            //    Rating: 5.56336425733209
+            //    PlayCount: 102
+            //    KFactor: 0.0327
+            //    Uncertainty: 0.96
+            //    LastPlayed: 2016-11-29T11:52:55
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.93663574266791
+            //    PlayCount: 102
+            //    KFactor: 0.0327
+            //    Uncertainty: 0.96
+            //    LastPlayed: 2016-11-29T11:52:55
+            //    TimeLimit: 900000
+            //
+            //Third simulated gameplay. Player performed poorly. Player rating decreass and scenario rating increases: 
+            //    PlayerID: Noob
+            //    Rating: 5.5356982136711
+            //    PlayCount: 103
+            //    KFactor: 0.03204375
+            //    Uncertainty: 0.935
+            //    LastPlayed: 2016-11-29T11:52:55
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.9643017863289
+            //    PlayCount: 103
+            //    KFactor: 0.03204375
+            //    Uncertainty: 0.935
+            //    LastPlayed: 2016-11-29T11:52:55
+            //    TimeLimit: 900000
+            //
+            //Fourth simulated gameplay. Using custom K factor to scale rating changes. Player rating increases and scenario rating decreases: 
+            //    Player ID: Noob.
+            //    Rating: 5.57109750442052.
+            //    K factor: 0.0313875.
+            //
+            //    Player ID (custom K factor): Noob.
+            //    Rating: 6.66351313201197.
+            //    K factor: 1.
+            //
+            //    ScenarioID: Hard AI.
+            //    Rating: 5.92890249557948.
+            //    K factor: 0.0313875.
+            //
+            //    ScenarioID (custom K factor): Hard AI.
+            //    Rating: 4.83648686798803.
+            //    K factor: 1.
+            #endregion example output
+        }
+
+        static void demoAdaptationAndAssessmentElo() {
+            string adaptID = DifficultyAdapterElo.Type; // [SC] Make sure to change the adaptation ID
+            string gameID = "TileZero";
+            string playerID = "Noob";           // [SC] using this player as an example
+            string scenarioID = "Hard AI";      // [SC] using this scenario as an example
+            bool updateScenarioRatings = true;  // [SC] alwyas update scenario ratings
+            DateTime lastPlayed = DateTime.ParseExact("2012-12-31T11:59:59", TwoA.DATE_FORMAT, null);
+
+            TwoA twoA = new TwoA(new MyBridge());
+
+            #region Examples of adding scenario data into TwoA
+
+            // [SC] Scenario data is strored in 'TwoA.scenarios'. Its datatype is List<ScenarioNode>. It has a public access modifier.
+            // [SC] Each ScenarioNode instance contains data for a single scenario.
+            // [SC] TwoA also provides predefined methods for adding new scenarios.
+            // [SC] Methods in TwoA (cases 1 - 4) ensure that all values are valid and ID combination is unique to the scenario.
+            // [SC] Excercise care if you add new scenario by directly accessing the 'TwoA.scenarios' variable. Make sure a combination of adapID, gameID, scenarioID is unique.
+
+            // [SC] Adding scenario data, Case 1
+            twoA.AddScenario(
+                new ScenarioNode (adaptID, gameID, "Very Easy AI") {
+                    Rating = 1.2,
+                    PlayCount = 100,
+                    KFactor = 0.0075,
+                    Uncertainty = 0.01,
+                    LastPlayed = lastPlayed,
+                    TimeLimit = 900000
+                }
+            );
+
+            // [SC] Adding scenario data, Case 2
+            twoA.AddScenario(new ScenarioNode(adaptID, gameID, "Easy AI", 1.4, 100, 0.0075, 0.01, lastPlayed, 900000));
+
+            // [SC] Adding scenario data, Case 3
+            twoA.AddScenario(adaptID, gameID, "Medium Color AI", 1.6, 100, 0.0075, 0.01, lastPlayed, 900000);
+
+            // [SC] Adding scenario data, Case 4: scenario parameters will be assigned default values
+            // [SC] Changing the default values
+            twoA.AddScenario(adaptID, gameID, "Medium Shape AI");
+            twoA.ScenarioRating(adaptID, gameID, "Medium Shape AI", 1.6);
+            twoA.ScenarioPlayCount(adaptID, gameID, "Medium Shape AI", 100);
+            twoA.ScenarioKFactor(adaptID, gameID, "Medium Shape AI", 0.0075);
+            twoA.ScenarioUncertainty(adaptID, gameID, "Medium Shape AI", 0.01);
+            twoA.ScenarioLastPlayed(adaptID, gameID, "Medium Shape AI", lastPlayed);
+            twoA.ScenarioTimeLimit(adaptID, gameID, "Medium Shape AI", 900000);
+
+            // [SC] Adding scenario data, Case 5: directly accessing the List structure
+            twoA.scenarios.Add(
+                new ScenarioNode (adaptID, gameID, scenarioID) { // [SC] Hard AI   
+                    Rating = 6,
+                    PlayCount = 100,
+                    KFactor = 0.0075,
+                    Uncertainty = 0.01,
+                    LastPlayed = lastPlayed,
+                    TimeLimit = 900000
+                }
+            );
+
+            // [SC] Adding scenario data, Case 6
+            twoA.scenarios.Add(new ScenarioNode(adaptID, gameID, "Very Hard AI", 10, 100, 0.0075, 0.01, lastPlayed, 900000));
+
+            // [SC] Retrieveing a scenario node by scenario ID
+            ScenarioNode scenarioNode = twoA.Scenario(adaptID, gameID, scenarioID);
+
+            printMsg("\nExample scenario parameters: ");
+            printMsg(String.Format("    ScenarioID: {0}.", scenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", scenarioNode.Rating));
+            printMsg(String.Format("    Play count: {0}.", scenarioNode.PlayCount));
+            printMsg(String.Format("    K factor: {0}.", scenarioNode.KFactor));
+            printMsg(String.Format("    Uncertainty: {0}.", scenarioNode.Uncertainty));
+            printMsg(String.Format("    Last played: {0}.", scenarioNode.LastPlayed.ToString(TwoA.DATE_FORMAT)));
+            printMsg(String.Format("    Time limit: {0}.", scenarioNode.TimeLimit));
+
+            #endregion Examples of adding scenario data into TwoA
+
+            #region Examples of adding player data into TwoA
+
+            // [SC] Player data is strored in 'TwoA.players'. Its datatype is List<PlayerNode>. It has a public access modifier.
+            // [SC] Similar to scenarios, predefined methods 'AddPlayer' are provided by the TwoA class.
+
+            // [SC] adding a new player node
+            twoA.AddPlayer(
+                new PlayerNode (adaptID, gameID, playerID) {
+                    Rating = 5.5,
+                    PlayCount = 100,
+                    KFactor = 0.0075,
+                    Uncertainty = 0.01,
+                    LastPlayed = lastPlayed,
+                }
+            );
+
+            // [SC] Retrieveing a player node by player ID
+            PlayerNode playerNode = twoA.Player(adaptID, gameID, playerID);
+
+            printMsg("\nExample player parameters: ");
+            printMsg(String.Format("    Player ID: {0}.", playerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", playerNode.Rating));
+            printMsg(String.Format("    Play count: {0}.", playerNode.PlayCount));
+            printMsg(String.Format("    K factor: {0}.", playerNode.KFactor));
+            printMsg(String.Format("    Uncertainty: {0}.", playerNode.Uncertainty));
+            printMsg(String.Format("    Last played: {0}.", playerNode.LastPlayed.ToString(TwoA.DATE_FORMAT)));
+
+            #endregion Examples of adding player data into TwoA
+
+            #region Demo of methods for requesting a recommended scenario
+
+            // [SC] Demo of different methods for requesting a recommended scenario
+            // [SC] By default, the success rate P = 0.75, this means that TwoA will recommend a scenario where player's probability of completing the scenario is 75%. 
+            // [SC] For more details on the success rate, refer to the "Methods for controlling success rate parameter." section in the API manual.
+            // [SC] Asking for the recommendations for the player 'Noob'.
+            // [SC] Among 10 requests, the most frequent recommendation should be the scenario 'Hard AI'.
+            // [SC] 'Hard AI' scenario is recommended since it has a rating closest to the player's rating
+            printMsg(String.Format("\nAsk 10 times for a recommended scenarios for the player {0}; P = 0.75: ", playerID));
+            printMsg("    " + twoA.TargetScenarioID(adaptID, gameID, playerID));                // Case 1: directly return scenario ID
+            printMsg("    " + twoA.TargetScenarioID(playerNode));                               // Case 2: directly return scenario ID
+            printMsg("    " + twoA.TargetScenario(adaptID, gameID, playerID).ScenarioID);       // Case 3: returns ScenarioNode
+            printMsg("    " + twoA.TargetScenario(playerNode).ScenarioID);                      // Case 4: returns ScenarioNode
+            printMsg("    " + twoA.TargetScenario(playerNode, twoA.scenarios).ScenarioID);      // Case 5: provide a custom list of scenarios from which to choose; returns ScenarioNode
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+            printMsg("    " + twoA.TargetScenarioID(playerNode));
+
+            // [SC] Changing the success rate to P = 0.1. Player has only 10% chance of succeeding.
+            // [SC] For more details on the success rate, refer to the "Methods for controlling success rate parameter." section in the API manual.
+            // [SC] TwoA should recommend Very Hard AI in some cases.
+            twoA.SetTargetDistribution(adaptID, 0.1, 0.05, 0.01, 0.35);
+            printMsg(String.Format("\nAsk 10 times for a recommended scenarios for the player {0}; P = 0.5: ", playerID));
+            for (int i = 0; i < 10; i++) {
+                printMsg("    " + twoA.TargetScenarioID(playerNode));
+            }
+
+            #endregion Demo of methods for requesting a recommended scenario
+
+            #region Demo for requesting a recommended difficulty rating
+
+            // [SC] set target success rate to P = 0.75
+            twoA.SetTargetDistribution(adaptID, 0.75, 0.1, 0.5, 1.0); // [SC] this is the same as twoA.SetDefaultTargetDistribution(adaptID)
+            printMsg(String.Format("\nRecommended difficulty rating {0} for player rating {1} and success rate {2}."
+                    , twoA.TargetDifficultyRating(playerNode), playerNode.Rating, twoA.GetTargetDistribution(adaptID)[0]));
+            // [SC] set target success rate to P = 0.1
+            twoA.SetTargetDistribution(adaptID, 0.1, 0.05, 0.01, 0.35);
+            printMsg(String.Format("Recommended difficulty rating {0} for player rating {1} and success rate {2}."
+                    , twoA.TargetDifficultyRating(playerNode), playerNode.Rating, twoA.GetTargetDistribution(adaptID)[0]));
+            twoA.TargetDifficultyRating(playerNode);
+
+            #endregion Demo for requesting a recommended difficulty rating
+
+            #region Demo of methods for reassessing player and scenario ratings
+
+            printMsg(String.Format("\n1st simulated gameplay. Player's accuracy is 1.0. Expected accuracy is {0}. Player rating increases and scenario rating decreases: "
+                , twoA.CalculateExpectedScore(adaptID, playerNode.Rating, scenarioNode.Rating, 0)));
+            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 0, 1.0, updateScenarioRatings, 0); // [SC] any value of rt is automatically ignored
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg(String.Format("\n2nd simulated gameplay. Player's accuracy is 0.75. Expected accuracy is {0}. Player rating increases and scenario rating decreases: "
+                , twoA.CalculateExpectedScore(adaptID, playerNode.Rating, scenarioNode.Rating, 0)));
+            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 0, 0.75, updateScenarioRatings, 0); // [SC] any value of rt is automatically ignored
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg(String.Format("\n3rd simulated gameplay. Player's accuracy is 0.5. Expected accuracy is {0}. Player rating increases slightly and scenario rating decreases slightly: "
+                , twoA.CalculateExpectedScore(adaptID, playerNode.Rating, scenarioNode.Rating, 0)));
+            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 0, 0.5, updateScenarioRatings, 0); // [SC] any value of rt is automatically ignored
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg(String.Format("\n4th simulated gameplay. Player's accuracy is 0.25. Expected accuracy is {0}. Player rating decreass and scenario rating increases: "
+                , twoA.CalculateExpectedScore(adaptID, playerNode.Rating, scenarioNode.Rating, 0)));
+            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 0, 0.25, updateScenarioRatings, 0); // [SC] any value of rt is automatically ignored
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg(String.Format("\n5th simulated gameplay. Player's accuracy is 0.0. Expected accuracy is {0}. Player rating decreass and scenario rating increases: "
+               , twoA.CalculateExpectedScore(adaptID, playerNode.Rating, scenarioNode.Rating, 0)));
+            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 0, 0.0, updateScenarioRatings, 0); // [SC] any value of rt is automatically ignored
+            printPlayerData(twoA, adaptID, gameID, playerID);
+            printMsg("");
+            printScenarioData(twoA, adaptID, gameID, scenarioID);
+
+            printMsg("\n6th simulated gameplay. Using custom K factor to scale rating changes. Player rating increases and scenario rating decreases: ");
+            PlayerNode clonePlayerNode = playerNode.ShallowClone();
+            ScenarioNode cloneScenarioNode = scenarioNode.ShallowClone();
+            twoA.UpdateRatings(playerNode, scenarioNode, 0, 0.75, updateScenarioRatings, 0); // [SC] as a contrast, use no custom K factor
+            twoA.UpdateRatings(clonePlayerNode, cloneScenarioNode, 0, 0.75, updateScenarioRatings, 1); // [SC] use K factor of 10 for both player and scenario
+            printMsg(String.Format("    Player ID: {0}.", playerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", playerNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", playerNode.KFactor));
+            printMsg("");
+            printMsg(String.Format("    Player ID (custom K factor): {0}.", clonePlayerNode.PlayerID));
+            printMsg(String.Format("    Rating: {0}.", clonePlayerNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", clonePlayerNode.KFactor));
+            printMsg("");
+            printMsg(String.Format("    ScenarioID: {0}.", scenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", scenarioNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", scenarioNode.KFactor));
+            printMsg("");
+            printMsg(String.Format("    ScenarioID (custom K factor): {0}.", cloneScenarioNode.ScenarioID));
+            printMsg(String.Format("    Rating: {0}.", cloneScenarioNode.Rating));
+            printMsg(String.Format("    K factor: {0}.", cloneScenarioNode.KFactor));
+
+            #endregion Demo of methods for reassessing player and scenario ratings
+
+            #region example output
+            ///////////////////////////////////////////////////////////////////////
+            // [SC] the Console/Debug output should resemble (not exactly the same since there is some randomness in the asset) the output below
+            //
+            //Example scenario parameters: 
+            //    ScenarioID: Hard AI
+            //    Rating: 6
+            //    PlayCount: 100
+            //    KFactor: 0.0075
+            //    Uncertainty: 0.01
+            //    LastPlayed: 2012-12-31T11:59:59
+            //    TimeLimit: 900000
+            //
+            ////Example player parameters: 
+            //    PlayerID: Noob
+            //    Rating: 5.5
+            //    PlayCount: 100
+            //    KFactor: 0.0075
+            //    Uncertainty: 0.01
+            //    LastPlayed: 2012-12-31T11:59:59
+            //
+            //Ask 10 times for a recommended scenarios for the player Noob; P = 0.75:  
+            //    Medium Color AI
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Hard AI
+            //    Very Easy AI
+            //    Easy AI
+            //    Hard AI
+            //    Hard AI
+            //    Medium Color AI
+            //
+            //Ask 10 times for a recommended scenarios for the player Noob; P = 0.5: 
+            //    Very Hard AI
+            //    Very Hard AI
+            //    Hard AI
+            //    Very Hard AI
+            //    Very Hard AI
+            //    Very Hard AI
+            //    Hard AI
+            //    Very Hard AI
+            //    Hard AI
+            //    Hard AI
+            //
+            // Recommended difficulty rating 4.40138771133189 for player rating 5.5 and success rate 0.75.
+            // Recommended difficulty rating 7.69722457733622 for player rating 5.5 and success rate 0.1.
+            //
+            //1st simulated gameplay. Player's accuracy is 1.0. Expected accuracy is 0.377540051684686. Player rating increases and scenario rating decreases: 
+            //    PlayerID: Noob
+            //    Rating: 5.52076292965099
+            //    PlayCount: 101
+            //    KFactor: 0.03335625
+            //    Uncertainty: 0.985
+            //    LastPlayed: 2017-11-06T09:17:40
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.97923707034901
+            //    PlayCount: 101
+            //    KFactor: 0.03335625
+            //    Uncertainty: 0.985
+            //    LastPlayed: 2017-11-06T09:17:40
+            //    TimeLimit: 900000
+            //
+            //2nd simulated gameplay. Player's accuracy is 0.75. Expected accuracy is 0.387347291047703. Player rating increases and scenario rating decreases: 
+            //    PlayerID: Noob
+            //    Rating: 5.53262167323373
+            //    PlayCount: 102
+            //    KFactor: 0.0327
+            //    Uncertainty: 0.96
+            //    LastPlayed: 2017-11-06T09:17:40
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.96737832676627
+            //    PlayCount: 102
+            //    KFactor: 0.0327
+            //    Uncertainty: 0.96
+            //    LastPlayed: 2017-11-06T09:17:40
+            //    TimeLimit: 900000
+            //
+            //3rd simulated gameplay. Player's accuracy is 0.5. Expected accuracy is 0.39299051581039. Player rating increases slightly and scenario rating decreases slightly: 
+            //    PlayerID: Noob
+            //    Rating: 5.53605065839273
+            //    PlayCount: 103
+            //    KFactor: 0.03204375
+            //    Uncertainty: 0.935
+            //    LastPlayed: 2017-11-06T09:17:40
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.96394934160727
+            //    PlayCount: 103
+            //    KFactor: 0.03204375
+            //    Uncertainty: 0.935
+            //    LastPlayed: 2017-11-06T09:17:40
+            //    TimeLimit: 900000
+            //
+            //4th simulated gameplay. Player's accuracy is 0.25. Expected accuracy is 0.394627681212804. Player rating decreass and scenario rating increases: 
+            //    PlayerID: Noob
+            //    Rating: 5.53151115704867
+            //    PlayCount: 104
+            //    KFactor: 0.0313875
+            //    Uncertainty: 0.91
+            //    LastPlayed: 2017-11-06T09:17:40
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.96848884295133
+            //    PlayCount: 104
+            //    KFactor: 0.0313875
+            //    Uncertainty: 0.91
+            //    LastPlayed: 2017-11-06T09:17:40
+            //    TimeLimit: 900000
+            //
+            //5th simulated gameplay. Player's accuracy is 0.0. Expected accuracy is 0.392460814156309. Player rating decreass and scenario rating increases: 
+            //    PlayerID: Noob
+            //    Rating: 5.51945034565363
+            //    PlayCount: 105
+            //    KFactor: 0.03073125
+            //    Uncertainty: 0.885
+            //    LastPlayed: 2017-11-06T09:17:40
+            //
+            //    ScenarioID: Hard AI
+            //    Rating: 5.98054965434637
+            //    PlayCount: 105
+            //    KFactor: 0.03073125
+            //    Uncertainty: 0.885
+            //    LastPlayed: 2017-11-06T09:17:40
+            //    TimeLimit: 900000
+            //
+            //6th simulated gameplay. Using custom K factor to scale rating changes. Player rating increases and scenario rating decreases: 
+            //    Player ID: Noob.
+            //    Rating: 5.53037585645568.
+            //    K factor: 0.030075.
+            //
+            //    Player ID (custom K factor): Noob.
+            //    Rating: 5.88272585029387.
+            //    K factor: 1.
+            //
+            //    ScenarioID: Hard AI.
+            //    Rating: 5.96962414354432.
+            //    K factor: 0.030075.
+            //
+            //    ScenarioID (custom K factor): Hard AI.
+            //    Rating: 5.61727414970613.
+            //    K factor: 1.
+            //
+
+            #endregion example output
         }
 
         static void testKnowledgeSpaceGeneration() {
@@ -83,7 +790,7 @@ namespace TestApp
 
             //////////////////////////////////////////////////////////////////////////////////////////////
             // [SC] note that KStructure object can be serialized into an XML format
-            
+
             // [SC] first, create XML factory singleton
             XMLFactory xmlFct = XMLFactory.Instance;
             // [SC] next, creating XML document from KStructue object
@@ -104,7 +811,7 @@ namespace TestApp
 
                 printMsg("Current rank: " + rank.RankIndex);
 
-                for(int catCounter = 0; catCounter<rank.getCategoryCount(); catCounter++) {
+                for (int catCounter = 0; catCounter < rank.getCategoryCount(); catCounter++) {
                     PCategory category = rank.getCategoryAt(catCounter);
 
                     printMsg("   Category: " + category.Id + "; Rating: " + category.Rating);
@@ -183,36 +890,36 @@ namespace TestApp
             //Rank 1
             //    Current state: (a); State type: core; State ID: S1.1
             //        Prev state: ()
-            //        Next state: (a,c)
             //        Next state: (a,b)
+            //        Next state: (a,c)
             //Rank 2
-            //    Current state: (a,c); State type: core; State ID: S2.1
+            //    Current state: (a,b); State type: core; State ID: S2.1
             //        Prev state: (a)
             //        Next state: (a,b,c)
-            //    Current state: (a,b); State type: core; State ID: S2.2
+            //    Current state: (a,c); State type: core; State ID: S2.2
             //        Prev state: (a)
             //        Next state: (a,b,c)
             //Rank 3
             //    Current state: (a,b,c); State type: core; State ID: S3.1
-            //        Prev state: (a,c)
             //        Prev state: (a,b)
+            //        Prev state: (a,c)
             //        Next state: (a,b,c,d)
             //Rank 4
             //    Current state: (a,b,c,d); State type: core; State ID: S4.1
             //        Prev state: (a,b,c)
-            //        Next state: (a,b,c,d,f)
             //        Next state: (a,b,c,d,e)
+            //        Next state: (a,b,c,d,f)
             //Rank 5
-            //    Current state: (a,b,c,d,f); State type: core; State ID: S5.1
+            //    Current state: (a,b,c,d,e); State type: core; State ID: S5.1
             //        Prev state: (a,b,c,d)
             //        Next state: (a,b,c,d,e,f)
-            //    Current state: (a,b,c,d,e); State type: core; State ID: S5.2
+            //    Current state: (a,b,c,d,f); State type: core; State ID: S5.2
             //        Prev state: (a,b,c,d)
             //        Next state: (a,b,c,d,e,f)
             //Rank 6
             //    Current state: (a,b,c,d,e,f); State type: core; State ID: S6.1
-            //        Prev state: (a,b,c,d,f)
             //        Prev state: (a,b,c,d,e)
+            //        Prev state: (a,b,c,d,f)
             //        Next state: (a,b,c,d,e,f,g)
             //Rank 7
             //    Current state: (a,b,c,d,e,f,g); State type: core; State ID: S7.1
@@ -227,132 +934,132 @@ namespace TestApp
             //Rank 1
             //    Current state: (a); State type: core; State ID: S1.1
             //        Prev state: ()
-            //        Next state: (a,c)
             //        Next state: (a,b)
+            //        Next state: (a,c)
             //Rank 2
-            //    Current state: (a,c); State type: core; State ID: S2.1
-            //        Prev state: (a)
-            //        Next state: (a,b,c)
-            //        Next state: (a,c,d)
-            //    Current state: (a,b); State type: core; State ID: S2.2
+            //    Current state: (a,b); State type: core; State ID: S2.1
             //        Prev state: (a)
             //        Next state: (a,b,c)
             //        Next state: (a,b,d)
+            //    Current state: (a,c); State type: core; State ID: S2.2
+            //        Prev state: (a)
+            //        Next state: (a,b,c)
+            //        Next state: (a,c,d)
             //Rank 3
             //    Current state: (a,b,c); State type: core; State ID: S3.1
-            //        Prev state: (a,c)
             //        Prev state: (a,b)
-            //        Next state: (a,b,c,d)
-            //    Current state: (a,c,d); State type: expanded; State ID: S3.2
             //        Prev state: (a,c)
             //        Next state: (a,b,c,d)
-            //        Next state: (a,c,d,e)
-            //        Next state: (a,c,d,f)
-            //    Current state: (a,b,d); State type: expanded; State ID: S3.3
+            //    Current state: (a,b,d); State type: expanded; State ID: S3.2
             //        Prev state: (a,b)
             //        Next state: (a,b,c,d)
             //        Next state: (a,b,d,e)
             //        Next state: (a,b,d,f)
+            //    Current state: (a,c,d); State type: expanded; State ID: S3.3
+            //        Prev state: (a,c)
+            //        Next state: (a,b,c,d)
+            //        Next state: (a,c,d,e)
+            //        Next state: (a,c,d,f)
             //Rank 4
             //    Current state: (a,b,c,d); State type: core; State ID: S4.1
             //        Prev state: (a,b,c)
-            //        Prev state: (a,c,d)
             //        Prev state: (a,b,d)
-            //        Next state: (a,b,c,d,f)
-            //        Next state: (a,b,c,d,e)
-            //    Current state: (a,c,d,e); State type: expanded; State ID: S4.2
             //        Prev state: (a,c,d)
             //        Next state: (a,b,c,d,e)
-            //        Next state: (a,c,d,e,f)
-            //        Next state: (a,c,d,e,g)
-            //    Current state: (a,b,d,e); State type: expanded; State ID: S4.3
+            //        Next state: (a,b,c,d,f)
+            //    Current state: (a,b,d,e); State type: expanded; State ID: S4.2
             //        Prev state: (a,b,d)
             //        Next state: (a,b,c,d,e)
             //        Next state: (a,b,d,e,f)
             //        Next state: (a,b,d,e,g)
-            //    Current state: (a,c,d,f); State type: expanded; State ID: S4.4
+            //    Current state: (a,c,d,e); State type: expanded; State ID: S4.3
             //        Prev state: (a,c,d)
-            //        Next state: (a,b,c,d,f)
+            //        Next state: (a,b,c,d,e)
             //        Next state: (a,c,d,e,f)
-            //        Next state: (a,c,d,f,g)
-            //    Current state: (a,b,d,f); State type: expanded; State ID: S4.5
+            //        Next state: (a,c,d,e,g)
+            //    Current state: (a,b,d,f); State type: expanded; State ID: S4.4
             //        Prev state: (a,b,d)
             //        Next state: (a,b,c,d,f)
             //        Next state: (a,b,d,e,f)
             //        Next state: (a,b,d,f,g)
+            //    Current state: (a,c,d,f); State type: expanded; State ID: S4.5
+            //        Prev state: (a,c,d)
+            //        Next state: (a,b,c,d,f)
+            //        Next state: (a,c,d,e,f)
+            //        Next state: (a,c,d,f,g)
             //Rank 5
-            //    Current state: (a,b,c,d,f); State type: core; State ID: S5.1
+            //    Current state: (a,b,c,d,e); State type: core; State ID: S5.1
             //        Prev state: (a,b,c,d)
-            //        Prev state: (a,c,d,f)
-            //        Prev state: (a,b,d,f)
+            //        Prev state: (a,b,d,e)
+            //        Prev state: (a,c,d,e)
             //        Next state: (a,b,c,d,e,f)
-            //        Next state: (a,b,c,d,f,g)
-            //    Current state: (a,b,c,d,e); State type: core; State ID: S5.2
+            //        Next state: (a,b,c,d,e,g)
+            //    Current state: (a,b,c,d,f); State type: core; State ID: S5.2
             //        Prev state: (a,b,c,d)
-            //        Prev state: (a,c,d,e)
-            //        Prev state: (a,b,d,e)
-            //        Next state: (a,b,c,d,e,f)
-            //        Next state: (a,b,c,d,e,g)
-            //    Current state: (a,c,d,e,f); State type: expanded; State ID: S5.3
-            //        Prev state: (a,c,d,e)
+            //        Prev state: (a,b,d,f)
             //        Prev state: (a,c,d,f)
             //        Next state: (a,b,c,d,e,f)
-            //        Next state: (a,c,d,e,f,g)
-            //    Current state: (a,b,d,e,f); State type: expanded; State ID: S5.4
+            //        Next state: (a,b,c,d,f,g)
+            //    Current state: (a,b,d,e,f); State type: expanded; State ID: S5.3
             //        Prev state: (a,b,d,e)
             //        Prev state: (a,b,d,f)
             //        Next state: (a,b,c,d,e,f)
             //        Next state: (a,b,d,e,f,g)
-            //    Current state: (a,c,d,e,g); State type: expanded; State ID: S5.5
+            //    Current state: (a,c,d,e,f); State type: expanded; State ID: S5.4
             //        Prev state: (a,c,d,e)
-            //        Next state: (a,b,c,d,e,g)
+            //        Prev state: (a,c,d,f)
+            //        Next state: (a,b,c,d,e,f)
             //        Next state: (a,c,d,e,f,g)
-            //    Current state: (a,b,d,e,g); State type: expanded; State ID: S5.6
+            //    Current state: (a,b,d,e,g); State type: expanded; State ID: S5.5
             //        Prev state: (a,b,d,e)
             //        Next state: (a,b,c,d,e,g)
             //        Next state: (a,b,d,e,f,g)
-            //    Current state: (a,c,d,f,g); State type: expanded; State ID: S5.7
-            //        Prev state: (a,c,d,f)
-            //        Next state: (a,b,c,d,f,g)
+            //    Current state: (a,c,d,e,g); State type: expanded; State ID: S5.6
+            //        Prev state: (a,c,d,e)
+            //        Next state: (a,b,c,d,e,g)
             //        Next state: (a,c,d,e,f,g)
-            //    Current state: (a,b,d,f,g); State type: expanded; State ID: S5.8
+            //    Current state: (a,b,d,f,g); State type: expanded; State ID: S5.7
             //        Prev state: (a,b,d,f)
             //        Next state: (a,b,c,d,f,g)
             //        Next state: (a,b,d,e,f,g)
+            //    Current state: (a,c,d,f,g); State type: expanded; State ID: S5.8
+            //        Prev state: (a,c,d,f)
+            //        Next state: (a,b,c,d,f,g)
+            //        Next state: (a,c,d,e,f,g)
             //Rank 6
             //    Current state: (a,b,c,d,e,f); State type: core; State ID: S6.1
-            //        Prev state: (a,b,c,d,f)
             //        Prev state: (a,b,c,d,e)
-            //        Prev state: (a,c,d,e,f)
+            //        Prev state: (a,b,c,d,f)
             //        Prev state: (a,b,d,e,f)
-            //        Next state: (a,b,c,d,e,f,g)
-            //    Current state: (a,b,c,d,f,g); State type: expanded; State ID: S6.2
-            //        Prev state: (a,b,c,d,f)
-            //        Prev state: (a,c,d,f,g)
-            //        Prev state: (a,b,d,f,g)
-            //        Next state: (a,b,c,d,e,f,g)
-            //    Current state: (a,b,c,d,e,g); State type: expanded; State ID: S6.3
-            //        Prev state: (a,b,c,d,e)
-            //        Prev state: (a,c,d,e,g)
-            //        Prev state: (a,b,d,e,g)
-            //        Next state: (a,b,c,d,e,f,g)
-            //    Current state: (a,c,d,e,f,g); State type: expanded; State ID: S6.4
             //        Prev state: (a,c,d,e,f)
+            //        Next state: (a,b,c,d,e,f,g)
+            //    Current state: (a,b,c,d,e,g); State type: expanded; State ID: S6.2
+            //        Prev state: (a,b,c,d,e)
+            //        Prev state: (a,b,d,e,g)
             //        Prev state: (a,c,d,e,g)
+            //        Next state: (a,b,c,d,e,f,g)
+            //    Current state: (a,b,c,d,f,g); State type: expanded; State ID: S6.3
+            //        Prev state: (a,b,c,d,f)
+            //        Prev state: (a,b,d,f,g)
             //        Prev state: (a,c,d,f,g)
             //        Next state: (a,b,c,d,e,f,g)
-            //    Current state: (a,b,d,e,f,g); State type: expanded; State ID: S6.5
+            //    Current state: (a,b,d,e,f,g); State type: expanded; State ID: S6.4
             //        Prev state: (a,b,d,e,f)
             //        Prev state: (a,b,d,e,g)
             //        Prev state: (a,b,d,f,g)
+            //        Next state: (a,b,c,d,e,f,g)
+            //    Current state: (a,c,d,e,f,g); State type: expanded; State ID: S6.5
+            //        Prev state: (a,c,d,e,f)
+            //        Prev state: (a,c,d,e,g)
+            //        Prev state: (a,c,d,f,g)
             //        Next state: (a,b,c,d,e,f,g)
             //Rank 7
             //    Current state: (a,b,c,d,e,f,g); State type: core; State ID: S7.1
             //        Prev state: (a,b,c,d,e,f)
-            //        Prev state: (a,b,c,d,f,g)
             //        Prev state: (a,b,c,d,e,g)
-            //        Prev state: (a,c,d,e,f,g)
+            //        Prev state: (a,b,c,d,f,g)
             //        Prev state: (a,b,d,e,f,g)
+            //        Prev state: (a,c,d,e,f,g)
             //
             //======================================
             //The XML document:
@@ -434,7 +1141,7 @@ namespace TestApp
             //      <KState xsd:id="S2.1" Type="core">
             //        <PCategories>
             //          <PCategory xsd:idref="a" />
-            //          <PCategory xsd:idref="c" />
+            //          <PCategory xsd:idref="b" />
             //        </PCategories>
             //        <PreviousStates>
             //          <KState xsd:idref="S1.1" />
@@ -446,7 +1153,7 @@ namespace TestApp
             //      <KState xsd:id="S2.2" Type="core">
             //        <PCategories>
             //          <PCategory xsd:idref="a" />
-            //          <PCategory xsd:idref="b" />
+            //          <PCategory xsd:idref="c" />
             //        </PCategories>
             //        <PreviousStates>
             //          <KState xsd:idref="S1.1" />
@@ -496,7 +1203,7 @@ namespace TestApp
             //          <PCategory xsd:idref="b" />
             //          <PCategory xsd:idref="c" />
             //          <PCategory xsd:idref="d" />
-            //          <PCategory xsd:idref="f" />
+            //          <PCategory xsd:idref="e" />
             //        </PCategories>
             //        <PreviousStates>
             //          <KState xsd:idref="S4.1" />
@@ -511,7 +1218,7 @@ namespace TestApp
             //          <PCategory xsd:idref="b" />
             //          <PCategory xsd:idref="c" />
             //          <PCategory xsd:idref="d" />
-            //          <PCategory xsd:idref="e" />
+            //          <PCategory xsd:idref="f" />
             //        </PCategories>
             //        <PreviousStates>
             //          <KState xsd:idref="S4.1" />
@@ -563,143 +1270,64 @@ namespace TestApp
             #endregion example output
         }
 
-        static void testAdaptationAndAssessment () {
+        static void testScoreCalculations() {
             TwoA twoA = new TwoA(new MyBridge());
 
-            string adaptID = "Game difficulty - Player skill";
-            string gameID = "TileZero";
-            string playerID = "Noob"; // [SC] using this player as an example
-            string scenarioID = "Hard AI"; // [SC] using this scenario as an example
+            /* SCORE MATRIX
+             *              ----------------------------------------------
+             *              | Low response  | High response | Time limit |
+             *              | time          | time          | reached    |
+             * -------------|---------------|---------------|------------|
+             * Response = 1 | High positive | Low positive  |     0      |
+             *              | score         | score         |            |
+             * -------------|---------------|---------------|------------|
+             * Response = 0 | High negative | Low negative  |     0      |
+             *              | score         | score         |            |
+             * ----------------------------------------------------------*/
 
-            // [SC] set this variable to true if you want changes saved to "TwoAAppSettings.xml" and "gameplaylogs.xml" files
-            // [SC] in this example, it is set to false since the two xml files are embedded resources
-            bool updateDatafiles = false;
+            double maxItemDuration = 600000; // [SC] a player has max 10 min to solve a problem
 
-            ////////////////////////////////////////////////////////////////
+            double responseTime = 30000; // [SC] assume the player spend only 30 seconds on the problem
+            double correctAnswer = 1; // [SC] assume the player provided a correct response
+            printMsg(String.Format("{3}RT = {0}; Response = {1}; Score = {2}.", responseTime, correctAnswer
+                                    , twoA.CalculateScore(correctAnswer, responseTime, maxItemDuration)
+                                    , Environment.NewLine));
 
-            printMsg("\nExample player parameters: ");
-            printPlayerData(twoA, adaptID, gameID, playerID);
+            responseTime = 540000; // [SC] assume the player spend 9 minutes to provide a correct response
+            printMsg(String.Format("RT = {0}; Response = {1}; Score = {2}.", responseTime, correctAnswer
+                                    , twoA.CalculateScore(correctAnswer, responseTime, maxItemDuration)));
 
-            ////////////////////////////////////////////////////////////////
+            correctAnswer = 0; // [SC] assume the player spent 9 minutes to provided an incorrect response
+            printMsg(String.Format("RT = {0}; Response = {1}; Score = {2}.", responseTime, correctAnswer
+                                    , twoA.CalculateScore(correctAnswer, responseTime, maxItemDuration)));
 
-            printMsg("\nExample scenario parameters: ");
-            printScenarioData(twoA, adaptID, gameID, scenarioID);
+            responseTime = 30000; // [SC] assume the player spend only 30 seconds and provided incorrect response
+            printMsg(String.Format("RT = {0}; Response = {1}; Score = {2}.", responseTime, correctAnswer
+                                    , twoA.CalculateScore(correctAnswer, responseTime, maxItemDuration)));
 
-            ////////////////////////////////////////////////////////////////
 
-            // [SC] Asking for the recommendations for the player 'Noob'.
-            // [SC] Among 10 requests, the most frequent recommendation should be the scenario 'Hard AI'.
-            // [SC] 'Hard AI' scenario is recommended since it has a rating closest to the player's rating
-            printMsg(String.Format("\nAsk 10 times for a recommended scenarios for the player {0}: ", playerID));
-            for (int count = 0; count < 10; count++) {
-                printMsg("    " + twoA.TargetScenarioID(adaptID, gameID, playerID));
-            }
+            responseTime = 600000; // [SC] assume time limit was reached
+            correctAnswer = 0; // [SC] answer does not matter
+            printMsg(String.Format("{3}RT = {0}; Response = {1}; Score = {2}.", responseTime, correctAnswer
+                                    , twoA.CalculateScore(correctAnswer, responseTime, maxItemDuration)
+                                    , Environment.NewLine));
+            correctAnswer = 1; // [SC] answer does not matter
+            printMsg(String.Format("RT = {0}; Response = {1}; Score = {2}.", responseTime, correctAnswer
+                                    , twoA.CalculateScore(correctAnswer, responseTime, maxItemDuration)));
 
-            ////////////////////////////////////////////////////////////////
 
-            printMsg("\nFirst simulated gameplay. Player performed well. Player rating increases and scenario rating decreases: ");
-            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 120000, 1, updateDatafiles);
-            printPlayerData(twoA, adaptID, gameID, playerID);
-            printMsg("\n");
-            printScenarioData(twoA, adaptID, gameID, scenarioID);
-
-            printMsg("\nSecond simulated gameplay. Player performed well again. Player rating increases and scenario rating decreases: ");
-            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 230000, 1, updateDatafiles);
-            printPlayerData(twoA, adaptID, gameID, playerID);
-            printMsg("\n");
-            printScenarioData(twoA, adaptID, gameID, scenarioID);
-
-            printMsg("\nThird simulated gameplay. Player performed poorly. Player rating decreass and scenario rating increases: ");
-            twoA.UpdateRatings(adaptID, gameID, playerID, scenarioID, 12000, 0, updateDatafiles);
-            printPlayerData(twoA, adaptID, gameID, playerID);
-            printMsg("\n");
-            printScenarioData(twoA, adaptID, gameID, scenarioID);
-
-            #region example output
-            ///////////////////////////////////////////////////////////////////////
-            // [SC] the Console/Debug output should resemble (not exactly the same since there is some randomness in the asset) the output below
+            ////////////////////////////////////////////////////////////////////
+            // [SC] expected output at Console and Debug window
             //
-            //Example player parameters: 
-            //    PlayerID: Noob
-            //    Rating: 5.5
-            //    PlayCount: 100
-            //    KFactor: 0.0075
-            //    Uncertainty: 0.01
-            //    LastPlayed: 2012-12-31T11:59:59
+            // RT = 30000;  Response = 1; Score = 0.95.
+            // RT = 540000; Response = 1; Score = 0.1.
+            // RT = 540000; Response = 0; Score = -0.1.
+            // RT = 30000;  Response = 0; Score = -0.95.
             //
-            //Example scenario parameters: 
-            //    ScenarioID: Hard AI
-            //    Rating: 6
-            //    PlayCount: 100
-            //    KFactor: 0.0075
-            //    Uncertainty: 0.01
-            //    LastPlayed: 2012-12-31T11:59:59
-            //    TimeLimit: 900000
-            //
-            //Ask 10 times for a recommended scenarios for the player Noob: 
-            //    Hard AI
-            //    Hard AI
-            //    Hard AI
-            //    Hard AI
-            //    Hard AI
-            //    Hard AI
-            //    Hard AI
-            //    Medium Shape AI
-            //    Hard AI
-            //    Hard AI
-            //
-            //First simulated gameplay. Player performed well. Player rating increases and scenario rating decreases: 
-            //    PlayerID: Noob
-            //    Rating: 5.53437762105702
-            //    PlayCount: 101
-            //    KFactor: 0.03335625
-            //    Uncertainty: 0.985
-            //    LastPlayed: 2016-11-29T11:52:55
-            //
-            //    ScenarioID: Hard AI
-            //    Rating: 5.96562237894298
-            //    PlayCount: 101
-            //    KFactor: 0.03335625
-            //    Uncertainty: 0.985
-            //    LastPlayed: 2016-11-29T11:52:55
-            //    TimeLimit: 900000
-            //
-            //Second simulated gameplay. Player performed well again. Player rating increases and scenario rating decreases: 
-            //    PlayerID: Noob
-            //    Rating: 5.56336425733209
-            //    PlayCount: 102
-            //    KFactor: 0.0327
-            //    Uncertainty: 0.96
-            //    LastPlayed: 2016-11-29T11:52:55
-            //
-            //    ScenarioID: Hard AI
-            //    Rating: 5.93663574266791
-            //    PlayCount: 102
-            //    KFactor: 0.0327
-            //    Uncertainty: 0.96
-            //    LastPlayed: 2016-11-29T11:52:55
-            //    TimeLimit: 900000
-            //
-            //Third simulated gameplay. Player performed poorly. Player rating decreass and scenario rating increases: 
-            //    PlayerID: Noob
-            //    Rating: 5.5356982136711
-            //    PlayCount: 103
-            //    KFactor: 0.03204375
-            //    Uncertainty: 0.935
-            //    LastPlayed: 2016-11-29T11:52:55
-            //
-            //    ScenarioID: Hard AI
-            //    Rating: 5.9643017863289
-            //    PlayCount: 103
-            //    KFactor: 0.03204375
-            //    Uncertainty: 0.935
-            //    LastPlayed: 2016-11-29T11:52:55
-            //    TimeLimit: 900000
-            //
-            #endregion example output
+            // RT = 600000; Response = 0; Score = 0.
+            // RT = 600000; Response = 1; Score = 0.
         }
 
-        // [2016.11.14] modified
         // [SC] just a helper method
         static void printPlayerData(TwoA twoA, string adaptID, string gameID, string playerID) {
             printMsg("    PlayerID: " + playerID);
@@ -710,7 +1338,6 @@ namespace TestApp
             printMsg("    LastPlayed: " + twoA.PlayerLastPlayed(adaptID, gameID, playerID).ToString(TwoA.DATE_FORMAT));
         }
 
-        // [2016.11.14] modified
         // [SC] just a helper method
         static void printScenarioData(TwoA twoA, string adaptID, string gameID, string scenarioID) {
             printMsg("    ScenarioID: " + scenarioID);
@@ -722,47 +1349,41 @@ namespace TestApp
             printMsg("    TimeLimit: " + twoA.ScenarioTimeLimit(adaptID, gameID, scenarioID));
         }
 
+        // [SC] prints a message to both console and debug output window
         static void printMsg(string msg) {
             Console.WriteLine(msg);
             Debug.WriteLine(msg);
         }
     }
 
-    // [SC][2016.11.29] modified
-    class MyBridge : IBridge, IDataStorage
+    // [SC] implement the bridge
+    class MyBridge : IBridge, IDataStorage, ILog
     {
-        // [SC] "TwoAAppSettings.xml" and "gameplaylogs.xml" are embedded resources
-        // [SC] these XML files are for running this test only and contain dummy data
-        // [SC] to use the TwoA asset with your game, generate blank XML files with the accompanying widget https://github.com/rageappliedgame/HATWidget
-        private const string resourceNS = "TestApp.Resources.";
-
-        public MyBridge() {}
+        public MyBridge() { }
 
         public bool Exists(string fileId) {
-            Assembly assembly = Assembly.GetExecutingAssembly();
-            string[] resourceNames = assembly.GetManifestResourceNames();
-            return resourceNames.Contains<string>(resourceNS + fileId);
+            throw new NotImplementedException();
         }
 
         public void Save(string fileId, string fileData) {
-            // [SC] save is not implemented since the xml files are embedded resources
+            throw new NotImplementedException();
         }
 
         public string Load(string fileId) {
-            Assembly assembly = Assembly.GetExecutingAssembly();
-            using (Stream stream = assembly.GetManifestResourceStream(resourceNS + fileId)) {
-                using (StreamReader reader = new StreamReader(stream)) {
-                    return reader.ReadToEnd();
-                }
-            }
+            throw new NotImplementedException();
         }
 
         public String[] Files() {
-            return null;
+            throw new NotImplementedException();
         }
 
         public bool Delete(string fileId) {
-            return false;
+            throw new NotImplementedException();
         }
+
+        public void Log(Severity severity, string msg) {
+            Debug.WriteLine(msg);
+            Console.WriteLine(msg);
+        } 
     }
 }

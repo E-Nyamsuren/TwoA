@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Namespace: HAT
+Namespace: TwoANS
 Filename: SimpleRNG.cs
 Description: 
     SimpleRNG is a simple random number generator based on George Marsaglia's MWC (multiply with carry) generator.
@@ -25,8 +25,18 @@ Description:
 // Change history:
 // [2016.10.06]
 //      - [SC] renamed namespace 'HAT' to 'TwoA'
+// [2016.12.06]
+//      - [SC] added 'Random rnd' field
+//      - [SC] added 'SetSeedFromRandom' method
+// [2016.12.07]
+//      - [SC] added 'Next' method
+// [2016.12.15]
+//      - [SC] added 'GetNormal' method that generates sample from one-sided distribution
+// [2017.12.19]
+//      - [SC] changed the namespace from TwoA to TwoANS
+//
 
-namespace TwoA
+namespace TwoANS
 {
     using System;
     using System.Collections.Generic;
@@ -41,6 +51,8 @@ namespace TwoA
         private static uint m_w;
         private static uint m_z;
 
+        private static Random rnd; // [SC] new addition to be used to init seeds
+
         /// <summary>
         /// Initializes static members of the TwoA.SimpleRNG class.
         /// </summary>
@@ -50,6 +62,9 @@ namespace TwoA
             // Any pair of unsigned integers should be fine.
             m_w = 521288629;
             m_z = 362436069;
+
+            // [SC] init Random instance
+            rnd = new Random();
         }
 
         /// <summary>
@@ -81,6 +96,14 @@ namespace TwoA
         }
 
         /// <summary>
+        /// Sets seeds to random numbers using Random object
+        /// </summary>
+        public static void SetSeedFromRandom() { // [SC] addition
+            uint rndNum = Convert.ToUInt32(rnd.Next(599999999));
+            SetSeed(rndNum, rndNum-100);
+        }
+
+        /// <summary>
         /// Sets seed from system time.
         /// </summary>
         public static void SetSeedFromSystemTime()
@@ -88,6 +111,17 @@ namespace TwoA
             System.DateTime dt = System.DateTime.Now;
             long x = dt.ToFileTime();
             SetSeed((uint)(x >> 16), (uint)(x % 4294967296));
+        }
+
+        /// <summary>
+        /// Return a non-negative random number less than the specified maximum. Uses default Random class.
+        /// </summary>
+        /// 
+        /// <param name="max">maximum value</param>
+        /// 
+        /// <returns>integer</returns>
+        public static int Next(int max) {
+            return rnd.Next(max);
         }
 
         /// <summary>
@@ -164,6 +198,31 @@ namespace TwoA
                 throw new ArgumentOutOfRangeException(msg);
             }
             return mean + standardDeviation * GetNormal();
+        }
+
+        /// <summary>
+        /// Get a random sample from a one-sided normal (Gaussian) distribution 
+        /// with specified mean and standard deviation.
+        /// </summary>
+        ///
+        /// <param name="mean">              The mean. </param>
+        /// <param name="standardDeviation"> The standard deviation. </param>
+        /// <param name="left">			     If true sample will be generator from left side, and right side otherwise. </param>
+        ///
+        /// <returns>
+        /// The normal.
+        /// </returns>
+        public static double GetNormal(double mean, double standardDeviation, bool left) {
+            double value = GetNormal(mean, standardDeviation);
+
+            if (left && value > mean) {
+                value = mean - (value - mean);
+            }
+            else if (!left && value < mean) {
+                value = mean + (mean - value);
+            }
+
+            return value;
         }
 
         /// <summary>

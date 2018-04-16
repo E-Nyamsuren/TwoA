@@ -33,14 +33,17 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\TwoA\AdaptationData.cs">
-      <Link>AdaptationData.cs</Link>
+    <Compile Include="..\TwoA\BaseAdapter.cs">
+      <Link>BaseAdapter.cs</Link>
     </Compile>
     <Compile Include="..\TwoA\DifficultyAdapter.cs">
       <Link>DifficultyAdapter.cs</Link>
     </Compile>
-    <Compile Include="..\TwoA\GameplaysData.cs">
-      <Link>GameplaysData.cs</Link>
+    <Compile Include="..\TwoA\DifficultyAdapterElo.cs">
+      <Link>DifficultyAdapterElo.cs</Link>
+    </Compile>
+    <Compile Include="..\TwoA\Gameplay.cs">
+      <Link>Gameplay.cs</Link>
     </Compile>
     <Compile Include="..\TwoA\KS\KSGenerator.cs">
       <Link>KS\KSGenerator.cs</Link>
@@ -65,6 +68,12 @@
     </Compile>
     <Compile Include="..\TwoA\KS\XML\XMLFactory.cs">
       <Link>KS\XML\XMLFactory.cs</Link>
+    </Compile>
+    <Compile Include="..\TwoA\PlayerNode.cs">
+      <Link>PlayerNode.cs</Link>
+    </Compile>
+    <Compile Include="..\TwoA\ScenarioNode.cs">
+      <Link>ScenarioNode.cs</Link>
     </Compile>
     <Compile Include="..\TwoA\SimpleRNG.cs">
       <Link>SimpleRNG.cs</Link>

@@ -1,7 +1,7 @@
 ﻿#region Header
 
 /*
-Copyright 2015 Enkhbold Nyamsuren (http://www.bcogs.net , http://www.bcogs.info/), Wim van der Vegt
+Copyright 2018 Enkhbold Nyamsuren (http://www.bcogs.net , http://www.bcogs.info/)
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,95 +15,54 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Namespace: HAT
-Filename: GameplaysData.cs
+Namespace: TwoANS
+Filename: Gameplay.cs
+Description:
+    [TODO]
 */
 
+
 // Change history:
-// [2016.10.06]
-//      - [SC] renamed namespace 'HAT' to 'TwoA'
-//      - [SC] renamed class 'HatAdaptation' to 'TwoAAdaptation'
-//      - [SC] renamed class 'HatGame' to 'TwoAGame'
-//      - [SC] renamed class 'HatGameplay' to 'TwoAGameplay'
+// [2017.12.19]
+//      - [SC] changed the namespace from TwoA to TwoANS
 
 #endregion Header
 
-namespace TwoA 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+
+namespace TwoANS 
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Xml.Serialization;
-
-    /// <summary>
-    /// The gameplays data.
-    /// </summary>
-    public class GameplaysData 
-    {
-        /// <summary>
-        /// The adaptation.
-        /// </summary>
-        [XmlElement("Adaptation")]
-        public List<TwoAAdaptation> Adaptation;
-    }
-
-    /// <summary>
-    /// A TwoA adaptation.
-    /// </summary>
-    public class TwoAAdaptation 
-    {
-        /// <summary>
-        /// The game.
-        /// </summary>
-        [XmlElement("Game")]
-        public List<TwoAGame> Game;
-
-        /// <summary>
-        /// Identifier for the adaptation.
-        /// </summary>
-        [XmlAttribute("AdaptationID")]
-        public String AdaptationID;
-
-    }
-
-    /// <summary>
-    /// A TwoA game.
-    /// </summary>
-    public class TwoAGame 
-    {
-        /// <summary>
-        /// The gameplay.
-        /// </summary>
-        [XmlElement("Gameplay")]
-        public List<TwoAGameplay> Gameplay;
-
-        /// <summary>
-        /// Identifier for the game.
-        /// </summary>
-        [XmlAttribute("GameID")]
-        public String GameID;
-    }
-
     /// <summary>
     /// A TwoA gameplay.
     /// </summary>
-    public class TwoAGameplay 
+    public class Gameplay 
     {
+        /// <summary>
+        /// Identifier for the Adaptation node.
+        /// </summary>
+        public String AdaptationID;
+
+        /// <summary>
+        /// Identifier for the Game node.
+        /// </summary>
+        public String GameID;
+
         /// <summary>
         /// Identifier for the player.
         /// </summary>
-        [XmlAttribute("PlayerID")]
         public String PlayerID;
 
         /// <summary>
         /// Identifier for the scenario.
         /// </summary>
-        [XmlAttribute("ScenarioID")]
         public String ScenarioID;
 
         /// <summary>
         /// The timestamp.
         /// </summary>
-        [XmlAttribute("Timestamp")]
         public String Timestamp;
 
         /// <summary>
